@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Logowanie</title>
+
+    <style>
+        body {
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background-color: #EEF8E8;
+        }
+        h1 {
+      margin-bottom: 30px;
+        }
+        button {
+      text-decoration: none;
+      padding: 12px 24px;
+      background-color: #112A46;
+      color: #EEF8E8;
+      border-radius: 8px;
+      transition: background-color 0.3s;
+      margin-top: 30px;
+        }
+    </style>
+</head>
+<body>
+<h1>Logowanie</h1>
+
+<form id="login_form">
+    <input type="text" name="username" placeholder="Nazwa użytkownika" required/>
+    <input type="password" name="password" placeholder="Hasło" required/>
+    <div style="text-align: center">
+        <button type="submit">Zaloguj</button>
+    </div>
+</form>
+
+<form id="totp_form" action="/verify" method="post" style="display:none">
+    <input type="text" name="token" placeholder="Kod TOTP bez spacji" required/>
+    <div style="text-align: center">
+        <button type="submit">Weryfikuj</button>
+    </div>
+</form>
+
+<script>
+    const login_form = document.getElementById('login_form');
+    const totp_form = document.getElementById('totp_form');
+
+login_form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = login_form.username.value;
+  const password = login_form.password.value;
+
+  const resp = await fetch('/login/webauthn', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+
+  const options = await resp.json();
+
+  function bufferDecode(value) {
+    value = value.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = '='.repeat((4 - value.length % 4) % 4);
+    return Uint8Array.from(atob(value + pad), c => c.charCodeAt(0));
+  }
+
+  options.challenge = bufferDecode(options.challenge);
+  if (options.allowCredentials) {
+    options.allowCredentials = options.allowCredentials.map(cred => ({
+      ...cred,
+      id: bufferDecode(cred.id)
+    }));
+  }
+
+  const assertion = await navigator.credentials.get({ publicKey: options });
+
+  function bufferEncode(value) {
+    return btoa(String.fromCharCode(...new Uint8Array(value)))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  }
+
+  const credentialData = {
+    id: assertion.id,
+    type: assertion.type,
+    raw_id: bufferEncode(assertion.rawId),
+    response: {
+  authenticator_data: bufferEncode(assertion.response.authenticatorData),
+  client_data_json: bufferEncode(assertion.response.clientDataJSON),
+  signature: bufferEncode(assertion.response.signature),
+  user_handle: assertion.response.userHandle ? bufferEncode(assertion.response.userHandle) : null
+},
+    username,
+    password
+  };
+
+  const verify = await fetch('/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(credentialData)
+  });
+
+  const result = await verify.json();
+  if(verify.ok && result.message === 'Login successful'){
+    totp_form.style.display = 'block';
+    login_form.style.display = 'none';
+  } else {
+    alert("Błąd logowania: " + result.message);
+  }
+});
+
+totp_form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const token = totp_form.token.value;
+  const username = login_form.username.value;
+
+  const resp = await fetch('/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, token })
+  });
+
+  const result = await resp.json();
+
+  if(resp.ok){
+    window.location.href = "/dashboard";
+  } else {
+    alert('Błąd weryfikacji: ' + result.message);
+  }
+});
+</script>
+</body>
+</html>

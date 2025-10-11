@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Rejestracja</title>
+
+    <style>
+        body {
+          font-family: sans-serif;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 100vh;
+          margin: 0;
+          background-color: #EEF8E8;
+        }
+
+        h1 {
+          margin-bottom: 30px;
+        }
+
+        button {
+          text-decoration: none;
+          padding: 12px 24px;
+          background-color: #112A46;
+          color: #EEF8E8;
+          border-radius: 8px;
+          transition: background-color 0.3s;
+          margin-top: 30px;
+        }
+    </style>
+</head>
+<body>
+<h1>Zarejestruj się</h1>
+
+<form id="register-form" action="/register" method="post">
+    <div id="register" style="text-align:center">
+        <input type="text" name="username" placeholder="Nazwa użytkownika" required/>
+        <input type="email" name="email" placeholder="Email" required/>
+        <input type="password" name="password" placeholder="Hasło" required/>
+        <br/>
+        <button type="submit">Zarejestruj się</button>
+    </div>
+    <div id="qr-container" style="display:none; text-align:center">
+        <h3>Zeskanuj kod w aplikacji 2FA</h3>
+        <img id="totp-qr" src="" alt="TOTP QR"/>
+        <br/>
+        <button id="continue">Kontynuuj</button>
+    </div>
+</form>
+
+<script>
+    const form = document.getElementById('register-form');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const username = form.username.value;
+      const email = form.email.value;
+      const password = form.password.value;
+
+      const resp = await fetch('/register/webauthn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, email })
+      });
+
+      const options = await resp.json();
+
+      function bufferDecode(value) {
+        value = value.replace(/-/g, '+').replace(/_/g, '/');
+        const pad = '='.repeat((4 - value.length % 4) % 4);
+        const base64 = value + pad;
+        return Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+      }
+
+      options.challenge = bufferDecode(options.challenge);
+      options.user.id = bufferDecode(options.user.id);
+
+      if (options.excludeCredentials) {
+        options.excludeCredentials = options.excludeCredentials.map(cred => ({
+          ...cred,
+          id: bufferDecode(cred.id)
+        }));
+      }
+
+      const credential = await navigator.credentials.create({ publicKey: options });
+      if (!credential) {
+        alert("Rejestracja WebAuthn została anulowana.");
+        return;
+      }
+
+      function bufferEncode(value) {
+        return btoa(String.fromCharCode(...new Uint8Array(value)))
+          .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+      }
+
+      const credentialData = {
+        id: credential.id,
+        raw_id: bufferEncode(credential.rawId),
+        type: credential.type,
+        response: {
+          attestationObject: bufferEncode(credential.response.attestationObject),
+          client_data_json: bufferEncode(credential.response.clientDataJSON)
+        },
+        username,
+        email,
+        password
+      };
+
+      const registerResp = await fetch('/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(credentialData)
+      });
+
+      const result = await registerResp.json();
+
+      if (registerResp.ok) {
+
+        document.getElementById('register').style.display = 'none';
+        document.getElementById('qr-container').style.display = 'block';
+
+        const qrResp = await fetch('/register/totp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username })
+        });
+
+        if (qrResp.ok) {
+          const qrData = await qrResp.json();
+          const qrImg = document.getElementById('totp-qr');
+          qrImg.src = 'data:image/png;base64,' + qrData.qr;
+          document.getElementById('qr-container').style.display = 'block';
+         } else {
+          alert("Błąd ładowania kodu QR.");
+        }
+
+        document.getElementById('continue').addEventListener('click', () => {
+          window.location.href = '/?registered=1';
+        });
+      } else {
+        alert('Błąd: ' + result.message);
+      }
+    });
+</script>
+</body>
+</html>

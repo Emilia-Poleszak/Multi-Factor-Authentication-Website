@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+
+    <style>
+        body {
+          font-family: sans-serif;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 100vh;
+          margin: 0;
+          background-color: #EEF8E8;
+        }
+
+        h1 {
+          margin-bottom: 30px;
+        }
+
+        .button-container {
+          display: flex;
+          gap: 20px;
+        }
+
+        a.button {
+          text-decoration: none;
+          padding: 12px 24px;
+          background-color: #112A46;
+          color: #EEF8E8;
+          border-radius: 8px;
+          transition: background-color 0.3s;
+        }
+
+        a.button:hover {
+          background-color: #112A46;
+        }
+    </style>
+</head>
+<body>
+
+{% if registered %}
+<div class="alert success">Rejestracja zakończona pomyślnie!</div>
+{% endif %}
+
+<h1>Witamy w projekcie BEMSI</h1>
+
+<div class="button-container">
+    <a href="/login" class="button">Zaloguj się</a>
+    <a href="/register" class="button">Zarejestruj się</a>
+</div>
+
+</body>
+</html>
