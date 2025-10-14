@@ -4,7 +4,8 @@
 
 ## Autorzy
 
-Emilia Poleszak, Anna Czarkowska
+Emilia Poleszak (https://github.com/Emilia-Poleszak)
+Anna Czarkowska (https://github.com/czarkosia)
 
 ## Opis projektu
 
@@ -25,3 +26,4 @@ wpisać poniższe polecenie do terminala:
 ```
 pip install -r requirements.txt
 ``` 
+
